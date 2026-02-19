@@ -30,12 +30,12 @@ export const loginUser = async (loginData) => {
   }
 
   try {
-    // Find user by email with password included
-    let user = await findUserByEmail(email);
+    // Find user by email with password included and populate hospital
+    let user = await findUserByEmail(email, true); // Assuming true means populate hospital
 
-    // If not found by email, try username with password included
+    // If not found by email, try username with password included and populate hospital
     if (!user) {
-      user = await findUserByUsername(email);
+      user = await findUserByUsername(email, true); // Assuming true means populate hospital
     }
 
     if (!user) {

@@ -12,21 +12,21 @@ const connectDB = async () => {
     // Most options are handled automatically
     await mongoose.connect(process.env.MONGODB_URI);
 
-    console.log("✅ MongoDB Connected Successfully");
+    console.log("MongoDB Connected Successfully");
 
     // Optional: Set up event listeners for better debugging
     mongoose.connection.on(
       "error",
-      console.error.bind(console, "❌ MongoDB connection error:")
+      console.error.bind(console, "MongoDB connection error:")
     );
   } catch (error) {
-    console.error("❌ MongoDB connection error:", error.message);
+    console.error("MongoDB connection error:", error.message);
 
     // Provide helpful error messages
     if (error.name === "MongoParseError") {
-      console.error("⚠️  Check your MONGODB_URI format in .env file");
+      console.error("Check your MONGODB_URI format in .env file");
       console.error(
-        "⚠️  Format should be: mongodb://localhost:27017/your-database-name"
+        "Format should be: mongodb://localhost:27017/your-database-name"
       );
     }
 

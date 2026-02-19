@@ -218,3 +218,49 @@ export const updateUserPasswordHandler = async (req, res) => {
     });
   }
 };
+
+/**
+ * @desc    Create a new user (Admin only)
+ * @route   POST /api/users
+ * @access  Private/Admin
+ */
+export const createUserHandler = async (req, res) => {
+  try {
+    const userData = req.body;
+
+    // Check if user with email or username already exists
+    // This logic duplicates some of registerService but we need it here for Admin creation
+
+    // We can import registerUser service or implement directly.
+    // Let's reuse registerUser logic from AuthService if possible, or duplicate for simplicity here since imports might be circular.
+    // Actually, userController imports from UserService.js. Let's see if UserService has createUser.
+    // Assuming we need to implement it here or call a service.
+
+    // For now, let's just use the createUser logic directly using registerUser from AuthService
+    // But we need to import it.
+
+    const { registerUser } = await import("../services/AuthService.js");
+    const result = await registerUser(userData);
+
+    if (!result.success) {
+      const statusCode = result.message.includes("already exists") ? 409 : 400;
+      return res.status(statusCode).json({
+        success: false,
+        message: result.message
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "User created successfully",
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error("Create User Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

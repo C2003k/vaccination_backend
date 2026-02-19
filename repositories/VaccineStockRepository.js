@@ -75,3 +75,11 @@ export const findCriticalStocks = async (hospitalId = null) => {
     throw new Error(`Error finding critical stocks: ${error.message}`);
   }
 };
+
+export const deleteVaccineStock = async (stockId) => {
+  try {
+    return await VaccineStock.findByIdAndDelete(stockId);
+  } catch (error) {
+    throw new Error(`Error deleting vaccine stock: ${error.message}`);
+  }
+};

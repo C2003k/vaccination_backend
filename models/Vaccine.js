@@ -68,7 +68,7 @@ const vaccineSchema = new mongoose.Schema(
 );
 
 // Index for efficient queries
-vaccineSchema.index({ code: 1 });
+// vaccineSchema.index({ code: 1 }); // Removed duplicate index
 vaccineSchema.index({ isActive: 1 });
 
 export default mongoose.model("Vaccine", vaccineSchema);

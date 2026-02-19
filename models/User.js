@@ -65,6 +65,20 @@ const userSchema = new mongoose.Schema(
       },
     },
 
+    // Health Worker Assignment (for mothers)
+    assignedCHW: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      sparse: true,
+    },
+
+    // Hospital Affiliation (for hospital_staff)
+    hospital: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hospital",
+      sparse: true,
+    },
+
     // Location Information (required for mothers)
     county: {
       type: String,

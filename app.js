@@ -12,11 +12,13 @@ import connectDB from "./config/db.js";
 // Import routes
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
-// import childRoutes from "./routes/childRoutes.js";
+import healthWorkerRoutes from "./routes/healthWorkerRoutes.js";
+import childRoutes from "./routes/childRoutes.js";
 // import vaccineRoutes from "./routes/vaccineRoutes.js";
 // import vaccinationRecordRoutes from "./routes/vaccinationRecordRoutes.js";
-// import hospitalRoutes from "./routes/hospitalRoutes.js";
-// import vaccineStockRoutes from "./routes/vaccineStockRoutes.js";
+import hospitalRoutes from "./routes/hospitalRoutes.js";
+import vaccineStockRoutes from "./routes/vaccineStockRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
 // Import middleware
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -68,11 +70,13 @@ app.get("/api/health", (req, res) => {
 // API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
-// app.use("/api/children", childRoutes);
+app.use("/api/health-worker", healthWorkerRoutes);
+app.use("/api/children", childRoutes);
 // app.use("/api/vaccines", vaccineRoutes);
 // app.use("/api/vaccination-records", vaccinationRecordRoutes);
-// app.use("/api/hospitals", hospitalRoutes);
-// app.use("/api/vaccine-stocks", vaccineStockRoutes);
+app.use("/api/hospitals", hospitalRoutes);
+app.use("/api/vaccine-stocks", vaccineStockRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Handle undefined routes
 app.all("*", (req, res) => {

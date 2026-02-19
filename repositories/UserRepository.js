@@ -85,22 +85,26 @@ export const updateUserLastLogin = async (userId) => {
 };
 
 // Find user by email (with password for login)
-export const findUserByEmail = async (email) => {
+export const findUserByEmail = async (email, shouldPopulateHospital = false) => {
   try {
-    return await User.findOne({ email: email.toLowerCase() }).select(
-      "+password"
-    ); // IMPORTANT: Include password field
+    let query = User.findOne({ email: email.toLowerCase() }).select("+password");
+    if (shouldPopulateHospital) {
+      query = query.populate("hospital");
+    }
+    return await query;
   } catch (error) {
     throw new Error(`Error finding user by email: ${error.message}`);
   }
 };
 
 // Find user by username (with password for login)
-export const findUserByUsername = async (username) => {
+export const findUserByUsername = async (username, shouldPopulateHospital = false) => {
   try {
-    return await User.findOne({ username: username.toLowerCase() }).select(
-      "+password"
-    ); // IMPORTANT: Include password field
+    let query = User.findOne({ username: username.toLowerCase() }).select("+password");
+    if (shouldPopulateHospital) {
+      query = query.populate("hospital");
+    }
+    return await query;
   } catch (error) {
     throw new Error(`Error finding user by username: ${error.message}`);
   }

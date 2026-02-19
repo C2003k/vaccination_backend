@@ -6,6 +6,7 @@ import {
   deleteAnExistingUser,
   getUsersByRoleHandler,
   updateUserPasswordHandler,
+  createUserHandler
 } from "../controllers/userController.js";
 import { verifyJWT } from "../middleware/verifyJWT.js";
 import { verifyRoles } from "../middleware/verifyRoles.js";
@@ -18,6 +19,7 @@ router.use(verifyJWT);
 
 // Admin only routes
 router.get("/", verifyRoles(ROLES.ADMIN), returnAllUsers);
+router.post("/", verifyRoles(ROLES.ADMIN), createUserHandler);
 router.get("/role/:role", verifyRoles(ROLES.ADMIN), getUsersByRoleHandler);
 router.delete("/:id", verifyRoles(ROLES.ADMIN), deleteAnExistingUser);
 

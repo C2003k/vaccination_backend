@@ -61,7 +61,7 @@ export const getChildByIdHandler = async (req, res) => {
     }
 
     // Check authorization: user is parent or has appropriate role
-    const isParent = child.parent.toString() === userId;
+    const isParent = (child.parent._id || child.parent).toString() === userId;
     const isAuthorized =
       isParent ||
       userRole === "admin" ||
@@ -215,7 +215,7 @@ export const updateChildHandler = async (req, res) => {
     }
 
     // Check authorization: user is parent or has appropriate role
-    const isParent = child.parent.toString() === userId;
+    const isParent = (child.parent._id || child.parent).toString() === userId;
     const isAuthorized =
       isParent ||
       userRole === "admin" ||
@@ -293,7 +293,7 @@ export const deleteChildHandler = async (req, res) => {
     }
 
     // Check authorization: only parent or admin can delete
-    const isParent = child.parent.toString() === userId;
+    const isParent = (child.parent._id || child.parent).toString() === userId;
     const isAuthorized = isParent || userRole === "admin";
 
     if (!isAuthorized) {
@@ -476,7 +476,7 @@ export const getChildVaccinationSummaryHandler = async (req, res) => {
     }
 
     // Check authorization: user is parent or has appropriate role
-    const isParent = child.parent.toString() === userId;
+    const isParent = (child.parent._id || child.parent).toString() === userId;
     const isAuthorized =
       isParent ||
       userRole === "admin" ||
@@ -532,8 +532,8 @@ export const getChildVaccinationSummaryHandler = async (req, res) => {
           completedDoses >= totalDoses
             ? "complete"
             : completedDoses > 0
-            ? "partial"
-            : "pending",
+              ? "partial"
+              : "pending",
       };
     });
 
@@ -551,8 +551,8 @@ export const getChildVaccinationSummaryHandler = async (req, res) => {
       coverageRate:
         dueVaccines.length > 0
           ? (vaccinationStatus.filter((v) => v.isComplete).length /
-              dueVaccines.length) *
-            100
+            dueVaccines.length) *
+          100
           : 0,
       upcomingVaccinations: vaccinationStatus
         .filter((v) => !v.isComplete)
@@ -586,3 +586,62 @@ export const getChildVaccinationSummaryHandler = async (req, res) => {
 // Import required services
 import { getVaccinationRecordsByChildId } from "../services/VaccinationRecordService.js";
 import { getAllVaccines } from "../services/VaccineService.js";
+import { addGrowthRecord, getGrowthHistory } from "../services/ChildService.js";
+
+/**
+ * @desc    Add growth record
+ * @route   POST /api/children/:id/growth
+ * @access  Private/Mother/Health Worker
+ */
+export const addGrowthRecordHandler = async (req, res) => {
+  try {
+    const childId = req.params.id;
+    const growthData = req.body;
+    const userId = req.user.id;
+    // const userRole = req.user.role; // Logic handled in service/repo if needed, or check here
+
+    const record = await addGrowthRecord(childId, growthData, userId);
+
+    res.status(201).json({
+      success: true,
+      message: "Growth record added successfully",
+      data: record,
+    });
+  } catch (error) {
+    console.error("Add growth record error:", error);
+    if (error.message === "Child not found") {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error adding growth record",
+    });
+  }
+};
+
+/**
+ * @desc    Get growth history
+ * @route   GET /api/children/:id/growth
+ * @access  Private
+ */
+export const getGrowthHistoryHandler = async (req, res) => {
+  try {
+    const childId = req.params.id;
+    const records = await getGrowthHistory(childId);
+
+    res.status(200).json({
+      success: true,
+      count: records.length,
+      data: records,
+    });
+  } catch (error) {
+    console.error("Get growth history error:", error);
+    if (error.message === "Child not found") {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+    res.status(500).json({
+      success: false,
+      message: error.message || "Error retrieving growth history",
+    });
+  }
+};

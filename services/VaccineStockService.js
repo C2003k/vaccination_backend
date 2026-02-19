@@ -5,6 +5,7 @@ import {
   createNewVaccineStock,
   updateExistingVaccineStock,
   findCriticalStocks,
+  deleteVaccineStock as removeVaccineStock,
 } from "../repositories/VaccineStockRepository.js";
 import { findHospitalById } from "../repositories/HospitalRepository.js";
 import { findVaccineById } from "../repositories/VaccineRepository.js";
@@ -148,4 +149,12 @@ export const getStockSummary = async (hospitalId = null) => {
   });
 
   return summary;
+};
+
+export const deleteVaccineStock = async (stockId) => {
+  const stock = await findVaccineStockById(stockId);
+  if (!stock) {
+    throw new Error("Vaccine stock not found");
+  }
+  return await removeVaccineStock(stockId);
 };

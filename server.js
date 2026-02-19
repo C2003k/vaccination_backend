@@ -1,4 +1,4 @@
-import app from "./app.js";
+import app from "./app.js"; // server entry point
 import dotenv from "dotenv";
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -74,35 +74,22 @@ const startServer = () => {
 
   // Start server
   httpServer.listen(PORT, HOST, () => {
-    console.log(`
-    🚀 Server Information
-    ====================
-    
-    Host: ${HOST}
-    Port: ${PORT}
-    URL: http://${HOST}:${PORT}
-    
-    📊 API Endpoints
-    ================
-    Health Check: http://${HOST}:${PORT}/api/health
-
-    Server started successfully at ${new Date().toISOString()}
-    `);
+    console.log(`Server started successfully on http://${HOST}:${PORT}`);
   });
 
   // Handle graceful shutdown
   const gracefulShutdown = () => {
     console.log(
-      "\n⚠️  Received shutdown signal. Graceful shutdown initiated..."
+      "\n Received shutdown signal. Graceful shutdown initiated..."
     );
 
     // Close HTTP server
     httpServer.close(() => {
-      console.log("✅ HTTP server closed");
+      console.log(" HTTP server closed");
 
       // Close database connections here if needed
 
-      console.log("✅ All connections closed. Exiting process.");
+      console.log("All connections closed. Exiting process.");
       process.exit(0);
     });
 

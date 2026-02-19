@@ -1,4 +1,5 @@
 import Child from "../models/Child.js";
+import GrowthRecord from "../models/GrowthRecord.js";
 
 /**
  * Child Repository - Data access layer for Child model
@@ -79,5 +80,24 @@ export const findChildrenByAgeRange = async (minMonths, maxMonths) => {
     }).populate("parent");
   } catch (error) {
     throw new Error(`Error finding children by age range: ${error.message}`);
+  }
+};
+
+// Create growth record
+export const createGrowthRecord = async (growthData) => {
+  try {
+    const record = new GrowthRecord(growthData);
+    return await record.save();
+  } catch (error) {
+    throw new Error(`Error creating growth record: ${error.message}`);
+  }
+};
+
+// Find growth records by child ID
+export const findGrowthRecordsByChildId = async (childId) => {
+  try {
+    return await GrowthRecord.find({ child: childId }).sort({ dateRecorded: -1 });
+  } catch (error) {
+    throw new Error(`Error finding growth records: ${error.message}`);
   }
 };

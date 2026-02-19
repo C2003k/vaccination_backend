@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { findUserById } from "../repositories/UserRepository.js";
+import User from "../models/User.js";
 
 const ACCESS_KEY = process.env.JWT_SECRET;
 
@@ -25,7 +26,9 @@ export const verifyJWT = async (req, res, next) => {
     const decoded = jwt.verify(token, ACCESS_KEY);
 
     // Get user from token
-    const user = await findUserById(decoded.userId);
+    const user = await User.findById(decoded.userId)
+      .select("-password")
+      .populate("hospital"); // Populate hospital details
     if (!user) {
       return res.status(401).json({
         success: false,

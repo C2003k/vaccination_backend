@@ -6,6 +6,8 @@ import {
   deleteExistingChild,
   findChildrenByParentId,
   findChildrenByAgeRange,
+  createGrowthRecord,
+  findGrowthRecordsByChildId,
 } from "../repositories/ChildRepository.js";
 import { findUserById } from "../repositories/UserRepository.js";
 import { ROLES } from "../config/roles.js";
@@ -172,4 +174,48 @@ export const getChildrenByAgeRange = async (minMonths, maxMonths) => {
   }
 
   return await findChildrenByAgeRange(minMonths, maxMonths);
+};
+
+/**
+ * Add growth record for a child
+ * @param {string} childId - Child ID
+ * @param {Object} growthData - Growth data (weight, height, etc.)
+ * @param {string} userId - User ID (mother or health worker)
+ * @returns {Object} Created growth record
+ */
+export const addGrowthRecord = async (childId, growthData, userId) => {
+  const child = await findChildById(childId);
+  if (!child) {
+    throw new Error("Child not found");
+  }
+
+  // Calculate age in months at time of recording if not provided
+  // For simplicity, we calculate current age if dateRecorded is close to now
+  // Real implementation might be more complex
+  const today = new Date();
+  const birthDate = new Date(child.dateOfBirth);
+  const ageInMonths =
+    (today.getFullYear() - birthDate.getFullYear()) * 12 +
+    (today.getMonth() - birthDate.getMonth());
+
+  return await createGrowthRecord({
+    ...growthData,
+    child: childId,
+    ageInMonths,
+    recordedBy: userId,
+  });
+};
+
+/**
+ * Get growth history for a child
+ * @param {string} childId - Child ID
+ * @returns {Array} List of growth records
+ */
+export const getGrowthHistory = async (childId) => {
+  const child = await findChildById(childId);
+  if (!child) {
+    throw new Error("Child not found");
+  }
+
+  return await findGrowthRecordsByChildId(childId);
 };
