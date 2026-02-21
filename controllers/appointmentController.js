@@ -2,6 +2,7 @@ import Appointment from "../models/Appointment.js";
 import Hospital from "../models/Hospital.js";
 import User from "../models/User.js";
 import Child from "../models/Child.js";
+import Vaccine from "../models/Vaccine.js";
 
 // Get appointments with filters
 export const getAppointments = async (req, res) => {
@@ -21,7 +22,7 @@ export const getAppointments = async (req, res) => {
         }
 
         if (status && status !== 'all') {
-            query.status = status;
+            query.status = status === "no-show" ? "no_show" : status;
         }
 
         let appointments = await Appointment.find(query)
@@ -47,9 +48,10 @@ export const getAppointments = async (req, res) => {
             age: apt.child ? calculateAge(apt.child.dateOfBirth) : "N/A",
             date: apt.scheduledDate,
             time: apt.scheduledTime,
-            status: apt.status,
+            status: apt.status === "no_show" ? "no-show" : apt.status,
             contact: apt.mother ? apt.mother.phone : "N/A",
-            type: apt.type
+            type: apt.type,
+            notes: apt.notes,
         }));
 
         res.status(200).json({
@@ -69,17 +71,49 @@ export const getAppointments = async (req, res) => {
 export const createAppointment = async (req, res) => {
     try {
         const { hospitalId } = req.params;
-        const { childId, vaccineId, date, time, type, notes } = req.body;
+        const {
+            childId,
+            childName,
+            parentName,
+            vaccineId,
+            vaccine,
+            date,
+            time,
+            type,
+            duration,
+            notes,
+            status,
+        } = req.body;
 
         // Validation
-        if (!childId || !date || !time) {
+        if ((!childId && !childName) || !date || !time) {
             return res.status(400).json({
                 success: false,
                 message: "Child, Date and Time are required"
             });
         }
 
-        const child = await Child.findById(childId);
+        let child = null;
+        if (childId) {
+            child = await Child.findById(childId);
+        } else {
+            const childQuery = { name: { $regex: `^${childName}$`, $options: "i" } };
+            child = await Child.findOne(childQuery).populate("parent");
+
+            if (!child && parentName) {
+                const parent = await User.findOne({
+                    name: { $regex: `^${parentName}$`, $options: "i" },
+                    role: "mother",
+                });
+                if (parent) {
+                    child = await Child.findOne({
+                        parent: parent._id,
+                        name: { $regex: `^${childName}$`, $options: "i" },
+                    });
+                }
+            }
+        }
+
         if (!child) {
             return res.status(404).json({
                 success: false,
@@ -87,16 +121,36 @@ export const createAppointment = async (req, res) => {
             });
         }
 
+        let resolvedVaccineId = vaccineId;
+        if (!resolvedVaccineId && vaccine) {
+            const normalizedCode = vaccine.replace(/\s+/g, "").toUpperCase();
+            const vaccineDoc = await Vaccine.findOne({
+                $or: [
+                    { name: { $regex: `^${escapeRegex(vaccine)}$`, $options: "i" } },
+                    { code: normalizedCode },
+                ],
+            });
+            resolvedVaccineId = vaccineDoc?._id;
+        }
+
+        if (!resolvedVaccineId) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid vaccine is required",
+            });
+        }
+
         const newAppointment = await Appointment.create({
             hospital: hospitalId,
-            child: childId,
+            child: child._id,
             mother: child.parent || req.user.id, // Assuming parent is linked to child or creator
-            vaccine: vaccineId,
+            vaccine: resolvedVaccineId,
             scheduledDate: new Date(date),
             scheduledTime: time,
             type: type || 'vaccination',
-            status: 'scheduled',
-            notes
+            status: status === "no-show" ? "no_show" : status || "scheduled",
+            duration: duration || 30,
+            notes,
         });
 
         res.status(201).json({
@@ -115,11 +169,22 @@ export const createAppointment = async (req, res) => {
 // Update appointment
 export const updateAppointment = async (req, res) => {
     try {
-        const { appointmentId } = req.params;
-        const updateData = req.body;
+        const { hospitalId, appointmentId } = req.params;
+        const updateData = { ...req.body };
+        if (updateData.status === "no-show") {
+            updateData.status = "no_show";
+        }
+        if (updateData.date) {
+            updateData.scheduledDate = new Date(updateData.date);
+            delete updateData.date;
+        }
+        if (updateData.time) {
+            updateData.scheduledTime = updateData.time;
+            delete updateData.time;
+        }
 
-        const appointment = await Appointment.findByIdAndUpdate(
-            appointmentId,
+        const appointment = await Appointment.findOneAndUpdate(
+            { _id: appointmentId, hospital: hospitalId },
             updateData,
             { new: true, runValidators: true }
         );
@@ -147,8 +212,9 @@ export const updateAppointment = async (req, res) => {
 // Update status
 export const updateAppointmentStatus = async (req, res) => {
     try {
-        const { appointmentId } = req.params;
-        const { status } = req.body;
+        const { hospitalId, appointmentId } = req.params;
+        let { status } = req.body;
+        if (status === "no-show") status = "no_show";
 
         if (!['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'].includes(status)) {
             return res.status(400).json({
@@ -157,8 +223,8 @@ export const updateAppointmentStatus = async (req, res) => {
             });
         }
 
-        const appointment = await Appointment.findByIdAndUpdate(
-            appointmentId,
+        const appointment = await Appointment.findOneAndUpdate(
+            { _id: appointmentId, hospital: hospitalId },
             { status },
             { new: true }
         );
@@ -186,9 +252,9 @@ export const updateAppointmentStatus = async (req, res) => {
 // Delete appointment
 export const deleteAppointment = async (req, res) => {
     try {
-        const { appointmentId } = req.params;
+        const { hospitalId, appointmentId } = req.params;
 
-        const appointment = await Appointment.findByIdAndDelete(appointmentId);
+        const appointment = await Appointment.findOneAndDelete({ _id: appointmentId, hospital: hospitalId });
 
         if (!appointment) {
             return res.status(404).json({
@@ -224,3 +290,5 @@ const calculateAge = (dob) => {
     }
     return `${age} years`;
 };
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

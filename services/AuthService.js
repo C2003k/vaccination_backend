@@ -20,40 +20,60 @@ const ACCESS_KEY = process.env.JWT_SECRET;
  * @returns {Object} Authentication result with success flag
  */
 export const loginUser = async (loginData) => {
-  const { email, password } = loginData;
+  const { email, username, password } = loginData; // Destructure both email and username
 
-  if (!email || !password) {
+  if (!password) {
     return {
       success: false,
-      message: "Email and password are required",
+      message: "Password is required",
+    };
+  }
+
+  // Determine the identifier being used (email or username)
+  const identifier = email || username;
+
+  if (!identifier) {
+    return {
+      success: false,
+      message: "Email or username is required",
     };
   }
 
   try {
-    // Find user by email with password included and populate hospital
-    let user = await findUserByEmail(email, true); // Assuming true means populate hospital
+    let user = null;
 
-    // If not found by email, try username with password included and populate hospital
-    if (!user) {
-      user = await findUserByUsername(email, true); // Assuming true means populate hospital
+    // First, try to find by email
+    if (email) {
+      user = await findUserByEmail(email, true); // true to populate hospital
     }
+
+    // If not found by email, or if a username was provided, try to find by username
+    if (!user && username) {
+      user = await findUserByUsername(username, true); // true to populate hospital
+    }
+
+    // Fallback: if only 'identifier' was provided and no user found yet, try both
+    if (!user && !email && !username) { // This case handles when only 'identifier' holds the value
+      user = await findUserByEmail(identifier, true);
+      if (!user) {
+        user = await findUserByUsername(identifier, true);
+      }
+    }
+
 
     if (!user) {
       return {
         success: false,
-        message: "Invalid email or password",
+        message: "Invalid email/username or password",
       };
     }
 
-    // console.log("🔍 User found for login:", {
-    //   email: user.email,
-    //   hasPassword: !!user.password,
-    //   passwordType: typeof user.password,
-    //   passwordLength: user.password ? user.password.length : 0,
-    //   passwordStartsWith: user.password
-    //     ? user.password.substring(0, 10)
-    //     : "N/A",
-    // });
+    // Populate virtuals based on role
+    if (user.role === ROLES.MOTHER) {
+        user = await user.populate('children');
+    } else if (user.role === ROLES.HOSPITAL_STAFF) {
+        user = await user.populate('hospital');
+    }
 
     // Check if user is active
     if (!user.isActive) {

@@ -9,6 +9,9 @@ import {
 import { findStocksByHospitalId } from "../repositories/VaccineStockRepository.js";
 import User from "../models/User.js";
 import Hospital from "../models/Hospital.js";
+import Appointment from "../models/Appointment.js";
+import Vaccine from "../models/Vaccine.js";
+import { ROLES } from "../config/roles.js";
 
 export const getAllHospitals = async (filters = {}) => {
   return await findAllHospitals(filters);
@@ -75,32 +78,82 @@ export const getHospitalDashboard = async (hospitalId) => {
     throw new Error("Hospital not found");
   }
 
+  // Get all children linked to this hospital through appointments
+  // This will give us children who have *ever* had an appointment at this hospital
+  const childrenWithAppointments = await Appointment.find({ hospital: hospitalId }).distinct('child');
+  const totalChildren = childrenWithAppointments.length;
+
+  // Get defaulters (children with at least one missed appointment)
+  const childrenWithMissedAppointments = await Appointment.find({
+    hospital: hospitalId,
+    status: "no_show",
+  }).distinct("child");
+  const totalDefaulters = childrenWithMissedAppointments.length;
+
   // Stock Summary
   const stocks = await findStocksByHospitalId(hospitalId);
   const stockSummary = {
     adequate: stocks.filter((s) => s.status === "adequate").length,
     low: stocks.filter((s) => s.status === "low").length,
     critical: stocks.filter((s) => s.status === "critical").length,
-    outOfStock: stocks.filter((s) => s.status === "out_of_stock").length,
+    out_of_stock: stocks.filter((s) => s.status === "out_of_stock").length,
     total: stocks.length,
   };
+  stockSummary.outOfStock = stockSummary.out_of_stock;
 
-  // Basic Patient Stats (Mock logic for now as Patient repository interactions are complex)
-  // In a real scenario, we would query:
-  // - Total children registered in this facility's catchment area
-  // - Vaccination coverage (fully immunized / total eligible)
-  // - Defaulters (missed appointments)
+  // Calculate dynamic stock level percentage for stat card
+  const currentStockPercentage = stockSummary.total > 0
+    ? Math.round(((stockSummary.adequate + stockSummary.low) / stockSummary.total) * 100)
+    : 0;
 
-  // For now, let's use the hospital's stored coverage data if available, or simulate
-  const coverage = hospital.coverage?.current || 0;
+  // Get vaccine coverage data for the charts
+  const allVaccines = await Vaccine.find({ isActive: true });
+  const coverageData = await Promise.all(allVaccines.map(async (v) => {
+    // Count completed vaccinations for this vaccine at this hospital
+    const completedCount = await Appointment.countDocuments({
+      hospital: hospitalId,
+      vaccine: v._id,
+      status: 'completed'
+    });
+    // For simplicity, total eligible children is approximated by totalChildren
+    // In a real system, eligibility would be more complex based on age and vaccine schedule
+    const percentage = totalChildren === 0 ? 0 : Math.round((completedCount / totalChildren) * 100);
 
-  // Mocking other stats for the dashboard demo until Patient module is fully linked
+    return {
+      vaccine: v.name,
+      coverage: percentage,
+      target: 90 // Static target
+    };
+  }));
+
+  // Determine overall coverage from the hospital's own record, or calculate an average if needed.
+  // For now, let's use the hospital's stored coverage data if available
+  const averageCoverage =
+    coverageData.length > 0
+      ? Math.round(
+          coverageData.reduce((sum, item) => sum + item.coverage, 0) / coverageData.length
+        )
+      : 0;
+  const overallCoverage = hospital.coverage?.current || averageCoverage;
+
   const stats = {
-    totalChildren: 1247, // Placeholder or fetch from User/Child models if linked to Hospital
-    coverage: `${coverage}%`,
-    stockLevel: `${Math.round((stockSummary.adequate / (stockSummary.total || 1)) * 100)}%`,
-    defaulters: 45 // Placeholder
+    totalChildren: totalChildren,
+    coverage: `${overallCoverage}%`, // Use existing hospital coverage
+    stockLevel: `${currentStockPercentage}%`,
+    defaulters: totalDefaulters
   };
+
+  // Retrieve recent stocks with vaccine details for low stock alerts
+  const recentStocks = await findStocksByHospitalId(hospitalId);
+  const populatedRecentStocks = await Promise.all(recentStocks.slice(0, 5).map(async (stock) => {
+      const vaccine = await Vaccine.findById(stock.vaccine);
+      return {
+          ...stock.toObject(),
+          vaccine: vaccine ? { name: vaccine.name, dosage: vaccine.dosage } : null,
+          currentStock: stock.quantity,
+          status: stock.status,
+      };
+  }));
 
   return {
     hospital: {
@@ -111,7 +164,8 @@ export const getHospitalDashboard = async (hospitalId) => {
     },
     stats,
     stockSummary,
-    recentStocks: stocks.slice(0, 5),
+    coverageData, // Add coverage data
+    recentStocks: populatedRecentStocks,
   };
 };
 
@@ -135,9 +189,9 @@ export const addAdminToHospital = async (hospitalId, userId) => {
     throw new Error("User not found");
   }
 
-  // Add admin to hospital's admins array if not already present
-  if (!hospital.admins.includes(userId)) {
-    hospital.admins.push(userId);
+  // Add admin to hospital's adminUsers array if not already present
+  if (!hospital.adminUsers.includes(userId)) {
+    hospital.adminUsers.push(userId);
     await hospital.save();
   }
 
@@ -155,8 +209,8 @@ export const removeAdminFromHospital = async (hospitalId, userId) => {
     throw new Error("User not found");
   }
 
-  // Remove admin from hospital's admins array
-  hospital.admins = hospital.admins.filter(
+  // Remove admin from hospital's adminUsers array
+  hospital.adminUsers = hospital.adminUsers.filter(
     (adminId) => adminId.toString() !== userId
   );
   await hospital.save();
@@ -244,18 +298,187 @@ export const getHospitalStaff = async (hospitalId) => {
 
   // Find all users who are admins of this hospital
   const staff = await User.find({
-    _id: { $in: hospital.admins },
+    _id: { $in: hospital.adminUsers },
   }).select("-password");
 
   return staff;
 };
 
+export const linkHospitalStaff = async (hospitalId, userId) => {
+  const hospital = await findHospitalById(hospitalId);
+  if (!hospital) {
+    throw new Error("Hospital not found");
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  if (user.role !== ROLES.HOSPITAL_STAFF) {
+    throw new Error("User is not hospital staff");
+  }
+
+  user.hospital = hospitalId;
+  await user.save();
+
+  if (!hospital.adminUsers.includes(userId)) {
+    hospital.adminUsers.push(userId);
+    await hospital.save();
+  }
+
+  return { hospital, staff: user };
+};
+
+export const unlinkHospitalStaff = async (hospitalId, userId) => {
+  const hospital = await findHospitalById(hospitalId);
+  if (!hospital) {
+    throw new Error("Hospital not found");
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  if (user.role !== ROLES.HOSPITAL_STAFF) {
+    throw new Error("User is not hospital staff");
+  }
+
+  const isLinkedToHospital =
+    (user.hospital && user.hospital.toString() === hospitalId) ||
+    hospital.adminUsers.some((adminId) => adminId.toString() === userId);
+
+  if (!isLinkedToHospital) {
+    throw new Error("User is not linked to this hospital");
+  }
+
+  if (user.hospital && user.hospital.toString() === hospitalId) {
+    user.hospital = undefined;
+    await user.save();
+  }
+
+  hospital.adminUsers = hospital.adminUsers.filter(
+    (adminId) => adminId.toString() !== userId
+  );
+  await hospital.save();
+
+  return { hospital, staff: user };
+};
+
+export const getEligibleHealthWorkers = async (hospitalId, options = {}) => {
+  const hospital = await findHospitalById(hospitalId);
+  if (!hospital) {
+    throw new Error("Hospital not found");
+  }
+
+  const { search } = options;
+
+  const query = {
+    role: ROLES.HEALTH_WORKER,
+    isActive: true,
+  };
+
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+      { phone: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  return await User.find(query)
+    .select("name email phone county subCounty ward location")
+    .sort({ name: 1 })
+    .limit(200)
+    .lean();
+};
+
+export const getEligibleMothers = async (hospitalId, options = {}) => {
+  const hospital = await findHospitalById(hospitalId);
+  if (!hospital) {
+    throw new Error("Hospital not found");
+  }
+
+  const { search, assigned } = options;
+  const query = {
+    role: ROLES.MOTHER,
+    isActive: true,
+  };
+
+  if (assigned === "true") {
+    query.assignedCHW = { $ne: null };
+  }
+
+  if (assigned === "false") {
+    query.assignedCHW = null;
+  }
+
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+      { phone: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  return await User.find(query)
+    .select("name email phone county subCounty ward location assignedCHW")
+    .populate("assignedCHW", "name email phone")
+    .sort({ name: 1 })
+    .limit(200)
+    .lean();
+};
+
+export const assignMotherToHealthWorker = async (hospitalId, motherId, healthWorkerId) => {
+  const hospital = await findHospitalById(hospitalId);
+  if (!hospital) {
+    throw new Error("Hospital not found");
+  }
+
+  const mother = await User.findById(motherId);
+  if (!mother) {
+    throw new Error("Mother not found");
+  }
+  if (mother.role !== ROLES.MOTHER) {
+    throw new Error("User is not a mother");
+  }
+
+  const healthWorker = await User.findById(healthWorkerId);
+  if (!healthWorker) {
+    throw new Error("Health worker not found");
+  }
+  if (healthWorker.role !== ROLES.HEALTH_WORKER) {
+    throw new Error("User is not a health worker");
+  }
+
+  mother.assignedCHW = healthWorker._id;
+  await mother.save();
+
+  return {
+    hospital,
+    mother,
+    healthWorker,
+  };
+};
+
 export const getUserHospital = async (userId) => {
-  // Find the hospital where this user is an admin
-  const hospital = await Hospital.findOne({
-    admins: userId,
+  // Primary lookup: hospital where user is in adminUsers list
+  let hospital = await Hospital.findOne({
+    adminUsers: userId,
     isActive: true,
   });
+
+  if (hospital) return hospital;
+
+  // Fallback lookup: user's direct hospital assignment
+  const user = await User.findById(userId).select("hospital");
+  if (user?.hospital) {
+    hospital = await Hospital.findOne({
+      _id: user.hospital,
+      isActive: true,
+    });
+  }
 
   return hospital;
 };

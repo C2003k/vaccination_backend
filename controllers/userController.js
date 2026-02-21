@@ -1,9 +1,11 @@
 import {
   getAllUsers,
   getUserById,
+  createUserByAdmin,
   updateUser,
   deleteUser,
   getUsersByRole,
+  getNavbarStats,
   updateUserPassword,
 } from "../services/UserService.js";
 
@@ -14,7 +16,7 @@ import {
  */
 export const returnAllUsers = async (req, res) => {
   try {
-    const users = await getAllUsers();
+    const users = await getAllUsers(req.query || {});
     res.status(200).json({
       success: true,
       count: users.length,
@@ -96,6 +98,18 @@ export const updateAnExistingUser = async (req, res) => {
       });
     }
 
+    if (
+      error.message.includes("Invalid") ||
+      error.message.includes("valid") ||
+      error.message.includes("required") ||
+      error.message.includes("format")
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: error.message,
@@ -140,7 +154,7 @@ export const deleteAnExistingUser = async (req, res) => {
 export const getUsersByRoleHandler = async (req, res) => {
   try {
     const { role } = req.params;
-    const users = await getUsersByRole(role);
+    const users = await getUsersByRole(role, req.query || {});
 
     res.status(200).json({
       success: true,
@@ -212,6 +226,16 @@ export const updateUserPasswordHandler = async (req, res) => {
       });
     }
 
+    if (
+      error.message.includes("Password must be at least") ||
+      error.message.includes("New password must be different")
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: error.message,
@@ -226,41 +250,53 @@ export const updateUserPasswordHandler = async (req, res) => {
  */
 export const createUserHandler = async (req, res) => {
   try {
-    const userData = req.body;
-
-    // Check if user with email or username already exists
-    // This logic duplicates some of registerService but we need it here for Admin creation
-
-    // We can import registerUser service or implement directly.
-    // Let's reuse registerUser logic from AuthService if possible, or duplicate for simplicity here since imports might be circular.
-    // Actually, userController imports from UserService.js. Let's see if UserService has createUser.
-    // Assuming we need to implement it here or call a service.
-
-    // For now, let's just use the createUser logic directly using registerUser from AuthService
-    // But we need to import it.
-
-    const { registerUser } = await import("../services/AuthService.js");
-    const result = await registerUser(userData);
-
-    if (!result.success) {
-      const statusCode = result.message.includes("already exists") ? 409 : 400;
-      return res.status(statusCode).json({
-        success: false,
-        message: result.message
-      });
-    }
+    const createdUser = await createUserByAdmin(req.body || {});
 
     res.status(201).json({
       success: true,
       message: "User created successfully",
-      data: result.data
+      data: createdUser,
     });
-
   } catch (error) {
-    console.error("Create User Error:", error);
+    let statusCode = 500;
+
+    if (
+      error.message.includes("already exists") ||
+      error.message.includes("required") ||
+      error.message.includes("Invalid") ||
+      error.message.includes("valid") ||
+      error.message.includes("format")
+    ) {
+      statusCode = 400;
+    }
+
+    if (error.message.includes("not found")) {
+      statusCode = 404;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @desc    Get role-based navbar stats
+ * @route   GET /api/users/navbar-stats
+ * @access  Private
+ */
+export const getNavbarStatsHandler = async (req, res) => {
+  try {
+    const stats = await getNavbarStats(req.user);
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };

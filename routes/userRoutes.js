@@ -6,7 +6,8 @@ import {
   deleteAnExistingUser,
   getUsersByRoleHandler,
   updateUserPasswordHandler,
-  createUserHandler
+  createUserHandler,
+  getNavbarStatsHandler,
 } from "../controllers/userController.js";
 import { verifyJWT } from "../middleware/verifyJWT.js";
 import { verifyRoles } from "../middleware/verifyRoles.js";
@@ -16,6 +17,9 @@ const router = express.Router();
 
 // All routes are protected
 router.use(verifyJWT);
+
+// All authenticated users can read their own navbar stats
+router.get("/navbar-stats", getNavbarStatsHandler);
 
 // Admin only routes
 router.get("/", verifyRoles(ROLES.ADMIN), returnAllUsers);

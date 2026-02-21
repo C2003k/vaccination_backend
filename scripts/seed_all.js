@@ -151,7 +151,7 @@ const seedAll = async () => {
 
                 // If scheduled/missed, date should be future/past respectively
                 let date = new Date();
-                if (status === "completed" || status === "missed") {
+                if (status === "completed" || status === "no_show") {
                     date.setDate(date.getDate() - Math.floor(Math.random() * 300));
                 } else {
                     date.setDate(date.getDate() + Math.floor(Math.random() * 60));

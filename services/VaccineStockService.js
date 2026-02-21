@@ -31,21 +31,19 @@ export const getStocksByHospitalId = async (hospitalId) => {
 };
 
 export const createVaccineStock = async (stockData) => {
-  const {
-    hospitalId,
-    vaccineId,
-    quantity,
-    minimumStock,
-    maximumStock,
-    expiryDate,
-  } = stockData;
+  const hospitalId = stockData.hospitalId || stockData.hospital;
+  const vaccineId = stockData.vaccineId || stockData.vaccine;
+  const quantity = Number(stockData.quantity);
+  const minimumStock = Number(stockData.minimumStock ?? 50);
+  const maximumStock = Number(stockData.maximumStock ?? Math.max(minimumStock * 3, quantity * 2, 100));
+  const expiryDate = stockData.expiryDate;
 
   if (
     !hospitalId ||
     !vaccineId ||
-    !quantity ||
-    !minimumStock ||
-    !maximumStock ||
+    Number.isNaN(quantity) ||
+    Number.isNaN(minimumStock) ||
+    Number.isNaN(maximumStock) ||
     !expiryDate
   ) {
     throw new Error("All required fields must be provided");
@@ -84,6 +82,12 @@ export const createVaccineStock = async (stockData) => {
 
   const stock = await createNewVaccineStock({
     ...stockData,
+    quantity,
+    minimumStock,
+    maximumStock,
+    deliveryDate: stockData.deliveryDate || new Date(),
+    batchNumber: stockData.batchNumber || `BATCH-${Date.now()}`,
+    unit: stockData.unit || "doses",
     hospital: hospitalId,
     vaccine: vaccineId,
     status,
@@ -99,8 +103,17 @@ export const updateVaccineStock = async (stockId, updateData) => {
     throw new Error("Vaccine stock not found");
   }
 
+  if (updateData.action && updateData.quantity !== undefined) {
+    const delta = Number(updateData.quantity);
+    const currentQty = Number(stock.quantity || 0);
+    updateData.quantity = updateData.action === "remove"
+      ? Math.max(0, currentQty - delta)
+      : currentQty + delta;
+  }
+
   // Recalculate status if quantity is updated
   if (updateData.quantity !== undefined) {
+    updateData.quantity = Number(updateData.quantity);
     let status = "adequate";
     if (updateData.quantity === 0) {
       status = "out_of_stock";
@@ -131,13 +144,19 @@ export const getStockSummary = async (hospitalId = null) => {
     adequate: 0,
     low: 0,
     critical: 0,
+    out_of_stock: 0,
     outOfStock: 0,
     total: stocks.length,
     soonToExpire: 0,
   };
 
   stocks.forEach((stock) => {
-    summary[stock.status]++;
+    if (stock.status === "out_of_stock") {
+      summary.out_of_stock++;
+      summary.outOfStock++;
+    } else if (summary[stock.status] !== undefined) {
+      summary[stock.status]++;
+    }
 
     // Check if stock expires in next 30 days
     const daysToExpiry = Math.ceil(

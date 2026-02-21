@@ -204,7 +204,7 @@ export const recordStockUsage = async (req, res) => {
 
     const stock = await getVaccineStockById(id);
 
-    if (stock.currentQuantity < quantityUsed) {
+    if (stock.quantity < quantityUsed) {
       return res.status(400).json({
         success: false,
         message: "Insufficient stock quantity",
@@ -212,7 +212,7 @@ export const recordStockUsage = async (req, res) => {
     }
 
     const updatedStock = await updateVaccineStock(id, {
-      currentQuantity: stock.currentQuantity - quantityUsed,
+      quantity: stock.quantity - quantityUsed,
     });
 
     res.status(200).json({
@@ -259,7 +259,7 @@ export const generateStockReport = async (req, res) => {
       stocks: stocks.map((stock) => ({
         vaccine: stock.vaccine,
         batchNumber: stock.batchNumber,
-        currentQuantity: stock.currentQuantity,
+        currentQuantity: stock.quantity,
         status: stock.status,
         expiryDate: stock.expiryDate,
       })),

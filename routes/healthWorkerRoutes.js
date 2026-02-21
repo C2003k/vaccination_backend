@@ -5,6 +5,7 @@ import {
     getSchedule,
     createSchedule,
     updateSchedule,
+    sendMotherReminder,
     getFieldReports,
     createFieldReport,
     recordVaccination
@@ -26,6 +27,8 @@ router.get("/assigned-mothers", getAssignedMothers);
 router.get("/schedule", getSchedule);
 router.post("/schedule", createSchedule);
 router.patch("/schedule/:id", updateSchedule);
+
+router.post("/mothers/:motherId/reminder", sendMotherReminder);
 
 // Field Reports Routes
 router.get("/reports", getFieldReports);

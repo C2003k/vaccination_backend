@@ -51,18 +51,18 @@ export const register = async (req, res) => {
  */
 export const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password } = req.body;
 
-    // Validate input
-    if (!email || !password) {
+    // Validate input: ensure at least one identifier (email or username) and password are provided
+    if ((!email && !username) || !password) {
       return res.status(400).json({
         success: false,
-        message: "Email and password are required",
+        message: "Email/Username and password are required",
       });
     }
 
-    // Call the login service
-    const result = await loginUser({ email, password });
+    // Call the login service, passing both email and username if available
+    const result = await loginUser({ email, username, password });
 
     // Check if login was successful
     if (!result.success) {

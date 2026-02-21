@@ -4,6 +4,7 @@ import VaccinationRecord from "../models/VaccinationRecord.js";
 import Schedule from "../models/Schedule.js";
 import Vaccine from "../models/Vaccine.js";
 import FieldReport from "../models/FieldReport.js";
+import Notification from "../models/Notification.js";
 import { ROLES } from "../config/roles.js";
 import { calculateUpcomingVaccines, calculateVaccinationStatus } from "../utils/vaccineScheduler.js";
 
@@ -107,7 +108,7 @@ export const getAssignedMothers = async (req, res) => {
 
         // Fetch mothers
         const mothers = await User.find(query)
-            .select("name phone village subCounty ward lastLogin")
+            .select("name phone location subCounty ward lastLogin")
             .populate({
                 path: "children",
                 select: "name dateOfBirth gender vaccinationStatus",
@@ -155,7 +156,7 @@ export const getAssignedMothers = async (req, res) => {
                 id: mother._id,
                 name: mother.name,
                 phone: mother.phone || "N/A",
-                village: mother.village || "N/A",
+                village: mother.location || "N/A",
                 subCounty: mother.subCounty || "N/A",
                 lastVisit: mother.lastLogin,
                 status: motherStatus,
@@ -206,10 +207,25 @@ export const getSchedule = async (req, res) => {
             .populate('mother', 'name phone')
             .sort({ scheduledDate: 1 });
 
+        const formatted = schedule.map((item) => {
+            const locationObj = item.location || {};
+            const locationLabel =
+                typeof locationObj === "string"
+                    ? locationObj
+                    : [locationObj.village, locationObj.ward, locationObj.subCounty]
+                        .filter(Boolean)
+                        .join(", ");
+
+            return {
+                ...item.toObject(),
+                location: locationLabel || "N/A",
+            };
+        });
+
         res.status(200).json({
             success: true,
-            count: schedule.length,
-            data: schedule
+            count: formatted.length,
+            data: formatted
         });
     } catch (error) {
         console.error("Error fetching schedule:", error);
@@ -226,6 +242,11 @@ export const createSchedule = async (req, res) => {
         const chwId = req.user.id;
         const { motherId, type, date, time, duration, purpose, priority, location } = req.body;
 
+        const locationData =
+            typeof location === "string"
+                ? { village: location }
+                : location || undefined;
+
         const schedule = await Schedule.create({
             healthWorker: chwId,
             mother: motherId,
@@ -235,15 +256,72 @@ export const createSchedule = async (req, res) => {
             duration,
             purpose,
             priority,
-            location
+            location: locationData
+        });
+
+        const locationObj = schedule.location || {};
+        const locationLabel =
+            typeof locationObj === "string"
+                ? locationObj
+                : [locationObj.village, locationObj.ward, locationObj.subCounty]
+                    .filter(Boolean)
+                    .join(", ");
+
+        res.status(201).json({
+            success: true,
+            data: {
+                ...schedule.toObject(),
+                location: locationLabel || "N/A",
+            }
+        });
+    } catch (error) {
+        console.error("Error creating schedule:", error);
+        res.status(500).json({ success: false, message: "Server Error", error: error.message });
+    }
+};
+
+/**
+ * Send reminder to assigned mother
+ * @route POST /api/health-worker/mothers/:motherId/reminder
+ */
+export const sendMotherReminder = async (req, res) => {
+    try {
+        const chwId = req.user.id;
+        const { motherId } = req.params;
+        const { message } = req.body;
+
+        if (!message) {
+            return res.status(400).json({ success: false, message: "Message is required" });
+        }
+
+        const mother = await User.findById(motherId);
+        if (!mother || mother.role !== ROLES.MOTHER) {
+            return res.status(404).json({ success: false, message: "Mother not found" });
+        }
+
+        if (!mother.assignedCHW || mother.assignedCHW.toString() !== chwId) {
+            return res.status(403).json({
+                success: false,
+                message: "Not authorized to send reminders to this mother",
+            });
+        }
+
+        const notification = await Notification.create({
+            user: mother._id,
+            type: "reminder",
+            priority: "medium",
+            title: "Vaccination Reminder",
+            message,
+            metadata: { sentBy: chwId },
         });
 
         res.status(201).json({
             success: true,
-            data: schedule
+            message: "Reminder sent successfully",
+            data: notification,
         });
     } catch (error) {
-        console.error("Error creating schedule:", error);
+        console.error("Error sending reminder:", error);
         res.status(500).json({ success: false, message: "Server Error", error: error.message });
     }
 };
@@ -263,9 +341,20 @@ export const updateSchedule = async (req, res) => {
             return res.status(404).json({ success: false, message: "Schedule not found" });
         }
 
+        const locationObj = schedule.location || {};
+        const locationLabel =
+            typeof locationObj === "string"
+                ? locationObj
+                : [locationObj.village, locationObj.ward, locationObj.subCounty]
+                    .filter(Boolean)
+                    .join(", ");
+
         res.status(200).json({
             success: true,
-            data: schedule
+            data: {
+                ...schedule.toObject(),
+                location: locationLabel || "N/A",
+            }
         });
     } catch (error) {
         console.error("Error updating schedule:", error);

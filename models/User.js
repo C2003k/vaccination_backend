@@ -108,6 +108,30 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Reminder preferences (primarily for mothers)
+    reminderPreferences: {
+      smsReminders: {
+        type: Boolean,
+        default: true,
+      },
+      phoneReminders: {
+        type: Boolean,
+        default: false,
+      },
+      daysBefore: {
+        type: [Number],
+        default: [7, 3, 1],
+      },
+      timeOfDay: {
+        type: String,
+        default: "09:00",
+      },
+      language: {
+        type: String,
+        default: "english",
+      },
+    },
+
     // Timestamps
     lastLogin: {
       type: Date,
@@ -135,6 +159,9 @@ userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
 
   try {
+    // Trim the password before hashing
+    this.password = this.password.trim();
+
     // Hash password with salt rounds
     const salt = await bcrypt.genSalt(parseInt(process.env.BCRYPT_SALT_ROUNDS));
     this.password = await bcrypt.hash(this.password, salt);
